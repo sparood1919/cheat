@@ -1,82 +1,188 @@
--- Lokaal Cheat Framework voor eigen gebruik
+-- Clean Local Cheat GUI for Roblox
 local Players = game:GetService("Players")
-local LocalPlayer = Players.LocalPlayer
-local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local LocalPlayer = Players.LocalPlayer
+local UIS = UserInputService
+local Camera = workspace.CurrentCamera
 
--- Cheat systeem table
+-- Cheat system table
 local CheatSystem = {
     FlyEnabled = false,
     SpeedEnabled = false,
+    JumpEnabled = false,
+    NoclipEnabled = false,
+    ESPEnabled = false,
     SpeedValue = 50,
+    JumpValue = 100,
 }
 
--- Fly functie
-function CheatSystem:ToggleFly()
-    self.FlyEnabled = not self.FlyEnabled
-    print("Fly ingeschakeld: ", self.FlyEnabled)
-end
-
--- Speed functie
-function CheatSystem:ToggleSpeed()
-    self.SpeedEnabled = not self.SpeedEnabled
-    if self.SpeedEnabled then
-        LocalPlayer.Character.Humanoid.WalkSpeed = self.SpeedValue
-    else
-        LocalPlayer.Character.Humanoid.WalkSpeed = 16 -- default
-    end
-    print("Speed ingeschakeld: ", self.SpeedEnabled)
-end
-
--- Teleport functie
-function CheatSystem:Teleport(position)
-    if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
-        LocalPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(position)
-        print("Geteleporteerd naar: ", position)
-    end
-end
-
--- GUI maken
+-- UI
 local ScreenGui = Instance.new("ScreenGui")
 ScreenGui.Name = "CheatGUI"
 ScreenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+ScreenGui.ResetOnSpawn = false
 
 local Frame = Instance.new("Frame")
-Frame.Size = UDim2.new(0, 200, 0, 150)
-Frame.Position = UDim2.new(0, 10, 0, 10)
-Frame.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+Frame.Size = UDim2.new(0, 250, 0, 350)
+Frame.Position = UDim2.new(0.5, -125, 0.5, -175)
+Frame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
 Frame.BorderSizePixel = 0
+Frame.Active = true
+Frame.Draggable = true
+Frame.Visible = false
 Frame.Parent = ScreenGui
 
--- Button functie
-local function CreateButton(text, pos, callback)
+local UIListLayout = Instance.new("UIListLayout")
+UIListLayout.Parent = Frame
+UIListLayout.SortOrder = Enum.SortOrder.LayoutOrder
+UIListLayout.Padding = UDim.new(0, 10)
+
+-- Helper: create toggle button
+local function CreateToggle(name, stateVar)
     local button = Instance.new("TextButton")
-    button.Size = UDim2.new(0, 180, 0, 30)
-    button.Position = pos
-    button.Text = text
-    button.TextColor3 = Color3.fromRGB(255, 255, 255)
+    button.Size = UDim2.new(1, -20, 0, 30)
     button.BackgroundColor3 = Color3.fromRGB(70, 70, 70)
-    button.BorderSizePixel = 0
+    button.TextColor3 = Color3.fromRGB(255,255,255)
+    button.Text = name .. ": OFF"
     button.Parent = Frame
-    button.MouseButton1Click:Connect(callback)
+
+    button.MouseButton1Click:Connect(function()
+        CheatSystem[stateVar] = not CheatSystem[stateVar]
+        if CheatSystem[stateVar] then
+            button.Text = name .. ": ON"
+            button.BackgroundColor3 = Color3.fromRGB(0, 255, 0)
+        else
+            button.Text = name .. ": OFF"
+            button.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
+        end
+    end)
 end
 
--- Buttons toevoegen
-CreateButton("Toggle Fly", UDim2.new(0, 10, 0, 10), function() CheatSystem:ToggleFly() end)
-CreateButton("Toggle Speed", UDim2.new(0, 10, 0, 50), function() CheatSystem:ToggleSpeed() end)
-CreateButton("Teleport Home", UDim2.new(0, 10, 0, 90), function() 
-    CheatSystem:Teleport(Vector3.new(0, 10, 0)) 
+-- Helper: create slider
+local function CreateSlider(name, stateVar, min, max)
+    local holder = Instance.new("Frame")
+    holder.Size = UDim2.new(1, -20, 0, 40)
+    holder.BackgroundTransparency = 1
+    holder.Parent = Frame
+
+    local label = Instance.new("TextLabel")
+    label.Size = UDim2.new(1,0,0,15)
+    label.Text = name .. ": " .. CheatSystem[stateVar]
+    label.TextColor3 = Color3.fromRGB(255,255,255)
+    label.BackgroundTransparency = 1
+    label.Parent = holder
+
+    local slider = Instance.new("TextButton")
+    slider.Size = UDim2.new(1,0,0,25)
+    slider.BackgroundColor3 = Color3.fromRGB(100,100,100)
+    slider.Text = ""
+    slider.Parent = holder
+
+    local dragging = false
+    slider.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = true
+        end
+    end)
+    slider.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = false
+        end
+    end)
+    UIS.InputChanged:Connect(function(input)
+        if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+            local relative = math.clamp((input.Position.X - slider.AbsolutePosition.X)/slider.AbsoluteSize.X,0,1)
+            CheatSystem[stateVar] = math.floor(min + (max-min)*relative)
+            label.Text = name .. ": " .. CheatSystem[stateVar]
+        end
+    end)
+end
+
+-- Create toggles
+CreateToggle("Fly", "FlyEnabled")
+CreateToggle("Speed", "SpeedEnabled")
+CreateSlider("Speed Value", "SpeedValue", 16, 200)
+CreateToggle("Jump Boost", "JumpEnabled")
+CreateSlider("Jump Value", "JumpValue", 50, 500)
+CreateToggle("Noclip", "NoclipEnabled")
+CreateToggle("ESP", "ESPEnabled")
+
+-- Toggle GUI with RightControl
+UIS.InputBegan:Connect(function(input, gameProcessed)
+    if input.KeyCode == Enum.KeyCode.RightControl and not gameProcessed then
+        Frame.Visible = not Frame.Visible
+    end
 end)
 
--- Fly loop
+-- Fly logic
+local FlyVelocity = Vector3.new()
 RunService.RenderStepped:Connect(function()
-    if CheatSystem.FlyEnabled and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
-        local hrp = LocalPlayer.Character.HumanoidRootPart
-        local direction = Vector3.new()
-        if UserInputService:IsKeyDown(Enum.KeyCode.W) then direction = direction + workspace.CurrentCamera.CFrame.LookVector end
-        if UserInputService:IsKeyDown(Enum.KeyCode.S) then direction = direction - workspace.CurrentCamera.CFrame.LookVector end
-        if UserInputService:IsKeyDown(Enum.KeyCode.A) then direction = direction - workspace.CurrentCamera.CFrame.RightVector end
-        if UserInputService:IsKeyDown(Enum.KeyCode.D) then direction = direction + workspace.CurrentCamera.CFrame.RightVector end
-        hrp.CFrame = hrp.CFrame + direction.Unit * 1
+    local character = LocalPlayer.Character
+    if character and character:FindFirstChild("HumanoidRootPart") then
+        local hrp = character.HumanoidRootPart
+        local humanoid = character:FindFirstChildOfClass("Humanoid")
+
+        -- Fly
+        if CheatSystem.FlyEnabled then
+            local cam = workspace.CurrentCamera
+            local dir = Vector3.new()
+            if UIS:IsKeyDown(Enum.KeyCode.W) then dir = dir + cam.CFrame.LookVector end
+            if UIS:IsKeyDown(Enum.KeyCode.S) then dir = dir - cam.CFrame.LookVector end
+            if UIS:IsKeyDown(Enum.KeyCode.A) then dir = dir - cam.CFrame.RightVector end
+            if UIS:IsKeyDown(Enum.KeyCode.D) then dir = dir + cam.CFrame.RightVector end
+            hrp.Velocity = dir.Unit * (CheatSystem.SpeedEnabled and CheatSystem.SpeedValue or 50)
+        end
+
+        -- Speed
+        if CheatSystem.SpeedEnabled then
+            humanoid.WalkSpeed = CheatSystem.SpeedValue
+        else
+            humanoid.WalkSpeed = 16
+        end
+
+        -- Jump
+        if CheatSystem.JumpEnabled then
+            humanoid.JumpPower = CheatSystem.JumpValue
+        else
+            humanoid.JumpPower = 50
+        end
+
+        -- Noclip
+        if CheatSystem.NoclipEnabled then
+            for _, part in pairs(character:GetDescendants()) do
+                if part:IsA("BasePart") then
+                    part.CanCollide = false
+                end
+            end
+        end
+    end
+end)
+
+-- ESP
+local function CreateESP(plr)
+    local box = Instance.new("BoxHandleAdornment")
+    box.Adornee = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
+    box.Size = Vector3.new(2,5,1)
+    box.Color3 = Color3.new(1,0,0)
+    box.AlwaysOnTop = true
+    box.ZIndex = 10
+    box.Parent = Camera
+    return box
+end
+
+local ESPBoxes = {}
+RunService.RenderStepped:Connect(function()
+    if CheatSystem.ESPEnabled then
+        for _, plr in pairs(Players:GetPlayers()) do
+            if plr ~= LocalPlayer and plr.Character and not ESPBoxes[plr] then
+                ESPBoxes[plr] = CreateESP(plr)
+            end
+        end
+    else
+        for _, box in pairs(ESPBoxes) do
+            box:Destroy()
+        end
+        ESPBoxes = {}
     end
 end)
